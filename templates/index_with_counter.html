@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="{{ url_for('static', filename='style.css') }}"
+    />
+
+    <title>GISAMM Security Day 2024</title>
+  </head>
+  <body>
+    <h1>GISAMM Security Day 2024</h1>
+    <h1>Event Check-In</h1>
+    <video id="qrScanner" width="100%" height="auto" playsinline></video>
+    <button id="scanButton">Scan QR Code</button>
+    <div id="result"></div>
+
+    <h2>Full Scan History</h2>
+    <ul id="historyList"></ul>
+
+    <script src="https://rawgit.com/schmich/instascan-builds/master/instascan.min.js"></script>
+    <script>
+      const video = document.getElementById("qrScanner");
+      const resultDiv = document.getElementById("result");
+      const historyList = document.getElementById("historyList");
+      const scanButton = document.getElementById("scanButton");
+
+      let scanner = null;
+      let scannedHistory =
+        JSON.parse(localStorage.getItem("scannedHistory")) || {};
+
+      // Initialize camera access
+      Instascan.Camera.getCameras()
+        .then((cameras) => {
+          if (cameras.length > 0) {
+            scanner = new Instascan.Scanner({ video: video, mirror: false });
+
+            scanner.addListener("scan", (result) => {
+              console.log("QR Code detected:", result);
+              handleCheckIn(result);
+            });
+
+            scanButton.addEventListener("click", () => {
+              console.log("Scan button clicked");
+              scanner.start(cameras[0]); // Start scanning with the first camera
+              scanButton.disabled = true; // Disable button to prevent multiple starts
+
+              // Show notification that the camera is now scanning
+              showNotification(
+                "Scanning QR Code",
+                "The camera is now scanning for QR codes."
+              );
+            });
+          } else {
+            resultDiv.innerHTML = "No cameras found.";
+          }
+        })
+        .catch((error) => {
+          console.error("Error accessing camera:", error);
+        });
+
+      function handleCheckIn(qrData) {
+        // Send the scanned QR code data to the server for validation
+        fetch("/check_in", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: `qr_data=${qrData}`,
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.status === "success") {
+              // Update the resultDiv with the information for the scanned person
+              resultDiv.innerHTML = `Scanned QR Code: ${qrData}<br>`;
+              resultDiv.innerHTML += `Check-in successful for ${data.participant_info["Full Name"]}<br>`;
+              resultDiv.innerHTML += `Email: ${data.participant_info["Email"]}<br>`;
+              resultDiv.innerHTML += `Phone: ${data.participant_info["Phone Number"]}<br>`;
+              resultDiv.innerHTML += `Check-in Count: ${data.count}<br>`;
+              resultDiv.innerHTML += `Timestamp: ${
+                data.timestamps[data.timestamps.length - 1]
+              }`;
+
+              // Update the scannedHistory for the specific QR code
+              const qrCode = data.participant_info["Email"];
+              if (!scannedHistory[qrCode]) {
+                scannedHistory[qrCode] = [];
+              }
+
+              scannedHistory[qrCode].push({
+                timestamp: data.timestamps[data.timestamps.length - 1],
+                // Add any other relevant information here
+              });
+
+              // Update the historyList
+              updateHistoryList(qrCode);
+
+              // Show browser notification for successful check-in
+              showNotification(
+                "Check-in successful",
+                `Participant: ${data.participant_info["Full Name"]}`
+              );
+            } else {
+              // Display error message on the page
+              resultDiv.innerHTML = `Error: ${data.message}`;
+
+              // Show browser notification for errors
+              showNotification("Error", `Error: ${data.message}`);
+            }
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+            resultDiv.innerHTML = "Error during check-in";
+          });
+      }
+
+      function updateHistoryList(qrCode) {
+        // Clear the existing list
+        historyList.innerHTML = "";
+
+        // Populate the list with scanned history for the specific QR code
+        if (scannedHistory[qrCode]) {
+          scannedHistory[qrCode].forEach((scan, index) => {
+            const listItem = document.createElement("li");
+            listItem.textContent = `Scan ${index + 1}: ${scan.timestamp}`;
+            // You can add additional information to listItem.textContent here
+            historyList.appendChild(listItem);
+          });
+        }
+
+        // Save the updated scannedHistory to localStorage
+        localStorage.setItem("scannedHistory", JSON.stringify(scannedHistory));
+      }
+
+      function showNotification(title, body) {
+        // Check if the browser supports notifications
+        if ("Notification" in window) {
+          Notification.requestPermission().then((permission) => {
+            if (permission === "granted") {
+              new Notification(title, { body: body });
+            }
+          });
+        }
+      }
+    </script>
+  </body>
+</html>
