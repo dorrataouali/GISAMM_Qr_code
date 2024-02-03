@@ -1,24 +1,11 @@
 from flask import Flask, render_template, request, jsonify
-from datetime import datetime
+import qrcode
 import pandas as pd
-import gspread
-from pydrive.auth import GoogleAuth
-from pydrive.drive import GoogleDrive
+from datetime import datetime
 
 app = Flask(__name__)
 
-# Authenticate with Google Drive
-gauth = GoogleAuth()
-gauth.LocalWebserverAuth()
-drive = GoogleDrive(gauth)
-
-# File ID of your Excel file on Google Drive
-file_id = 'https://docs.google.com/spreadsheets/d/1ZflCUx-sR0p5zLLbUc-Fqw3cZS68SkdD/edit?usp=drive_link&ouid=103349363123575394209&rtpof=true&sd=true'
-
 # Load participant data from Excel
-file = drive.CreateFile({'id': file_id})
-file.GetContentFile('participants.xlsx')
-
 df = pd.read_excel('participants.xlsx', engine='openpyxl')
 
 # Dummy database to simulate check-ins
